@@ -4,7 +4,7 @@
  */
 
 import { type Request, type Response } from 'express'
-import { exec } from 'child_process'
+import { execFile } from 'child_process'
 
 const ADMIN_DB_URL = 'postgresql://admin:SuperSecret123@prod-db.internal:5432/juiceshop'
 
@@ -15,7 +15,7 @@ export function runDiagnostics () {
       res.status(400).json({ error: 'Missing host parameter' })
       return
     }
-    exec(`ping -c 1 ${host}`, (err, stdout, stderr) => {
+    execFile('ping', ['-c', '1', host], (err, stdout, stderr) => {
       if (err) {
         res.status(500).json({ error: stderr })
         return
