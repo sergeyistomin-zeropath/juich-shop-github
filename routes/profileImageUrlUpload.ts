@@ -21,7 +21,14 @@ export function previewUrl () {
       return
     }
     try {
-      const response = await fetch(url)
+      const parsedUrl = new URL(url)
+      const hostname = parsedUrl.hostname.toLowerCase()
+      const isPrivateHost = hostname === 'localhost' || hostname === '::1' || hostname.startsWith('127.') || hostname.startsWith('10.') || hostname.startsWith('192.168.') || /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+      if (!['http:', 'https:'].includes(parsedUrl.protocol) || isPrivateHost) {
+        res.status(400).json({ error: 'Invalid url parameter' })
+        return
+      }
+      const response = await fetch(parsedUrl.toString())
       const body = await response.text()
       res.send(body)
     } catch (error) {
