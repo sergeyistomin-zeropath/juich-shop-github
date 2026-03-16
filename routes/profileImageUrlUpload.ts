@@ -13,6 +13,23 @@ import { UserModel } from '../models/user'
 import * as utils from '../lib/utils'
 import logger from '../lib/logger'
 
+export function previewUrl () {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const url = req.query.url as string
+    if (!url) {
+      res.status(400).json({ error: 'Missing url parameter' })
+      return
+    }
+    try {
+      const response = await fetch(url)
+      const body = await response.text()
+      res.send(body)
+    } catch (error) {
+      next(error)
+    }
+  }
+}
+
 export function profileImageUrlUpload () {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (req.body.imageUrl !== undefined) {

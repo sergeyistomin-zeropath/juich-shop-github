@@ -10,6 +10,24 @@ import { challenges } from '../data/datacache'
 import * as security from '../lib/insecurity'
 import * as db from '../data/mongodb'
 
+export function searchReviews () {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const filter = req.query.filter as string
+      if (!filter) {
+        res.status(400).json({ error: 'Missing filter parameter' })
+        return
+      }
+      db.reviewsCollection.find(JSON.parse(filter)).then(
+        (docs: any[]) => { res.json(docs) },
+        (err: unknown) => { res.status(500).json(err) }
+      )
+    } catch (err) {
+      next(err)
+    }
+  }
+}
+
 // vuln-code-snippet start noSqlReviewsChallenge forgedReviewChallenge
 export function updateProductReviews () {
   return (req: Request, res: Response, next: NextFunction) => {

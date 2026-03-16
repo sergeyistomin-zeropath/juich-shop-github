@@ -8,9 +8,30 @@ import { type Request, type Response, type NextFunction } from 'express'
 import * as challengeUtils from '../lib/challengeUtils'
 import { type ProductModel } from '../models/product'
 import { MemoryModel } from '../models/memory'
+import { UserModel } from '../models/user'
 import { challenges } from '../data/datacache'
 import * as security from '../lib/insecurity'
 import * as db from '../data/mongodb'
+
+export function getUserData () {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.query.userId as string
+      if (!userId) {
+        res.status(400).json({ error: 'Missing userId parameter' })
+        return
+      }
+      const user = await UserModel.findByPk(userId)
+      if (!user) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+      res.json({ id: user.id, email: user.email, username: user.username })
+    } catch (error) {
+      next(error)
+    }
+  }
+}
 
 export function dataExport () {
   return async (req: Request, res: Response, next: NextFunction) => {
