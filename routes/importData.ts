@@ -14,7 +14,7 @@ export function importData () {
         return
       }
       // eslint-disable-next-line no-eval
-      const obj = eval('(' + serialized + ')')
+      const obj = JSON.parse(serialized)
       res.json({ imported: obj })
     } catch (err) {
       next(err)
