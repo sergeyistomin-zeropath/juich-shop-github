@@ -15,7 +15,7 @@ export function viewLog () {
       return
     }
     try {
-      const logPath = path.join('logs', logFile)
+      const logPath = path.join('logs', path.basename(logFile))
       const content = fs.readFileSync(logPath, 'utf8')
       res.type('text/plain').send(content)
     } catch (err) {
