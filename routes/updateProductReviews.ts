@@ -18,7 +18,19 @@ export function searchReviews () {
         res.status(400).json({ error: 'Missing filter parameter' })
         return
       }
-      db.reviewsCollection.find(JSON.parse(filter)).then(
+      const parsedFilter = JSON.parse(filter)
+      if (!parsedFilter || typeof parsedFilter !== 'object' || Array.isArray(parsedFilter)) {
+        res.status(400).json({ error: 'Invalid filter parameter' })
+        return
+      }
+      const sanitizedFilter = Object.fromEntries(
+        Object.entries(parsedFilter).filter(([key, value]) => ['product', 'author', 'message'].includes(key) && (typeof value === 'string' || typeof value === 'number'))
+      ) as Record<string, string | number>
+      if (Object.keys(sanitizedFilter).length === 0) {
+        res.status(400).json({ error: 'No permitted filter fields' })
+        return
+      }
+      db.reviewsCollection.find(sanitizedFilter).then(
         (docs: any[]) => { res.json(docs) },
         (err: unknown) => { res.status(500).json(err) }
       )
