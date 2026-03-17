@@ -10,6 +10,36 @@ import { challenges } from '../data/datacache'
 import * as security from '../lib/insecurity'
 import * as db from '../data/mongodb'
 
+export function searchReviews () {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const filter = req.query.filter as string
+      if (!filter) {
+        res.status(400).json({ error: 'Missing filter parameter' })
+        return
+      }
+      const parsedFilter = JSON.parse(filter)
+      if (!parsedFilter || typeof parsedFilter !== 'object' || Array.isArray(parsedFilter)) {
+        res.status(400).json({ error: 'Invalid filter parameter' })
+        return
+      }
+      const sanitizedFilter = Object.fromEntries(
+        Object.entries(parsedFilter).filter(([key, value]) => ['product', 'author', 'message'].includes(key) && (typeof value === 'string' || typeof value === 'number'))
+      ) as Record<string, string | number>
+      if (Object.keys(sanitizedFilter).length === 0) {
+        res.status(400).json({ error: 'No permitted filter fields' })
+        return
+      }
+      db.reviewsCollection.find(sanitizedFilter).then(
+        (docs: any[]) => { res.json(docs) },
+        (err: unknown) => { res.status(500).json(err) }
+      )
+    } catch (err) {
+      next(err)
+    }
+  }
+}
+
 // vuln-code-snippet start noSqlReviewsChallenge forgedReviewChallenge
 export function updateProductReviews () {
   return (req: Request, res: Response, next: NextFunction) => {

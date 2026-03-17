@@ -13,6 +13,30 @@ import { UserModel } from '../models/user'
 import * as utils from '../lib/utils'
 import logger from '../lib/logger'
 
+export function previewUrl () {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const url = req.query.url as string
+    if (!url) {
+      res.status(400).json({ error: 'Missing url parameter' })
+      return
+    }
+    try {
+      const parsedUrl = new URL(url)
+      const hostname = parsedUrl.hostname.toLowerCase()
+      const isPrivateHost = hostname === 'localhost' || hostname === '::1' || hostname.startsWith('127.') || hostname.startsWith('10.') || hostname.startsWith('192.168.') || /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+      if (!['http:', 'https:'].includes(parsedUrl.protocol) || isPrivateHost) {
+        res.status(400).json({ error: 'Invalid url parameter' })
+        return
+      }
+      const response = await fetch(parsedUrl.toString())
+      const body = await response.text()
+      res.send(body)
+    } catch (error) {
+      next(error)
+    }
+  }
+}
+
 export function profileImageUrlUpload () {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (req.body.imageUrl !== undefined) {
