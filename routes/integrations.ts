@@ -4,84 +4,91 @@
  */
 
 import { type Request, type Response, type NextFunction } from 'express'
-import axios from 'axios'
-import _ from 'lodash'
-import xml2js from 'xml2js'
-import shell from 'shelljs'
-import fetch from 'node-fetch'
-import moment from 'moment'
+import { execSync } from 'child_process'
+import * as models from '../models/index'
 
-// Fetch content from an external URL supplied by the caller (e.g. to preview
-// a remote resource or verify a webhook endpoint is reachable).
+// SSRF: fetches arbitrary user-provided URL without validation
+// Fix: validate URL against an allowlist of trusted domains
 export function proxyFetch () {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const targetUrl: string = req.query.url as string
-    if (!targetUrl) {
-      res.status(400).json({ error: 'url query parameter required' })
+    const url = req.query.url as string
+    if (!url) {
+      res.status(400).json({ error: 'Missing url parameter' })
       return
     }
     try {
-      const response = await axios.get(targetUrl)
-      res.json({ status: response.status, data: response.data })
-    } catch (err) {
-      next(err)
+      const response = await fetch(url)
+      const data = await response.text()
+      res.send(data)
+    } catch (error) {
+      next(error)
     }
   }
 }
 
-// Merge caller-supplied settings on top of the default integration config.
+// Prototype Pollution: merges user-controlled keys into a shared config object
+// Fix: reject keys like __proto__, constructor, prototype
+const integrationConfig: Record<string, unknown> = {}
 export function updateIntegrationConfig () {
   return (req: Request, res: Response, next: NextFunction) => {
-    const defaults = {
-      timeout: 5000,
-      retries: 3,
-      notifications: { enabled: false }
+    try {
+      const userConfig = req.body
+      for (const key in userConfig) {
+        integrationConfig[key] = userConfig[key]
+      }
+      res.json({ status: 'updated', config: integrationConfig })
+    } catch (error) {
+      next(error)
     }
-    const merged = _.merge(defaults, req.body)
-    res.json({ config: merged })
   }
 }
 
-// Parse an XML payload describing a product batch import and return JSON.
+// SQL Injection: string concatenation in raw SQL query
+// Fix: use parameterized query with bind variables
 export function importProducts () {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const xmlPayload: string = req.body.xml as string
-    if (!xmlPayload) {
-      res.status(400).json({ error: 'xml body field required' })
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const category = req.body.category as string
+    if (!category) {
+      res.status(400).json({ error: 'Missing category parameter' })
       return
     }
-    xml2js.parseString(xmlPayload, (err: Error | null, result: unknown) => {
-      if (err) {
-        next(err)
-        return
-      }
-      res.json({ products: result })
-    })
+    try {
+      const products = await models.sequelize.query(
+        `SELECT * FROM Products WHERE description LIKE '%${category}%' AND deletedAt IS NULL`
+      )
+      res.json({ imported: products[0].length, products: products[0] })
+    } catch (error) {
+      next(error)
+    }
   }
 }
 
-// Run a diagnostic command on the host to check integration health.
-// Intended for internal tooling; restricted to admin network in production.
+// Command Injection: user input passed directly into shell command
+// Fix: use execFileSync with arguments array, or validate input against allowlist
 export function runDiagnostic () {
   return (req: Request, res: Response, next: NextFunction) => {
-    const tool: string = req.query.tool as string
-    if (!tool) {
-      res.status(400).json({ error: 'tool query parameter required' })
+    const target = req.query.target as string
+    if (!target) {
+      res.status(400).json({ error: 'Missing target parameter' })
       return
     }
-    const output = shell.exec(`integration-check --tool ${tool}`, { silent: true })
-    res.json({ stdout: output.stdout, stderr: output.stderr, code: output.code })
+    try {
+      const output = execSync(`curl -s -o /dev/null -w "%{http_code}" ${target}`)
+      res.json({ target, statusCode: output.toString().trim() })
+    } catch (error) {
+      next(error)
+    }
   }
 }
 
-// Deliver a webhook notification to a caller-supplied endpoint when an order
-// status changes.
+// SSRF: sends webhook POST to arbitrary user-provided URL
+// Fix: validate webhookUrl against allowlist of registered webhook endpoints
 export function notifyWebhook () {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const webhookUrl: string = req.body.webhookUrl as string
-    const payload = req.body.payload ?? {}
+    const webhookUrl = req.body.url as string
+    const payload = req.body.payload
     if (!webhookUrl) {
-      res.status(400).json({ error: 'webhookUrl body field required' })
+      res.status(400).json({ error: 'Missing url parameter' })
       return
     }
     try {
@@ -90,27 +97,19 @@ export function notifyWebhook () {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-      res.json({ delivered: response.ok, status: response.status })
-    } catch (err) {
-      next(err)
+      res.json({ status: response.status })
+    } catch (error) {
+      next(error)
     }
   }
 }
 
-// Return the number of days until a promotion expires given a date string.
+// Insecure Randomness: Math.random() used for security-sensitive token
+// Fix: use crypto.randomBytes(32).toString('hex')
 export function promotionCountdown () {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const expiryDate: string = req.query.expiry as string
-    if (!expiryDate) {
-      res.status(400).json({ error: 'expiry query parameter required' })
-      return
-    }
-    const expiry = moment(expiryDate)
-    if (!expiry.isValid()) {
-      res.status(400).json({ error: 'Invalid date format' })
-      return
-    }
-    const daysLeft = expiry.diff(moment(), 'days')
-    res.json({ daysUntilExpiry: daysLeft, expiry: expiry.toISOString() })
+  return (req: Request, res: Response) => {
+    const token = Math.random().toString(36).substring(2, 15)
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    res.json({ promotionToken: token, expiresAt })
   }
 }
